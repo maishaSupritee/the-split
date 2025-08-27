@@ -1,9 +1,6 @@
 "use client";
-import dotenv from "dotenv";
 import { DynamicContextProvider } from "@dynamic-labs/sdk-react-core";
 import { EthereumWalletConnectors } from "@dynamic-labs/ethereum";
-
-dotenv.config();
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
