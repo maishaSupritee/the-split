@@ -3,10 +3,10 @@
 import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { isEthereumWallet } from "@dynamic-labs/ethereum";
 import type { Address } from "viem";
-import { encodeFunctionData, parseEther, parseUnits } from "viem";
+import { encodeFunctionData, parseEther, parseUnits, type Hex } from "viem";
 import { baseSepolia } from "viem/chains";
 
-// Base Sepolia USDC (testnet) – decimals: 6
+// Base Sepolia USDC (testnet) – 6 decimals
 const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
 
 //function to ask the USDC contract to move tokens
@@ -23,6 +23,11 @@ const erc20 = [
   },
 ] as const;
 
+export type WalletCapabilities = {
+  atomic?: "supported" | "unsupported" | "unknown";
+  sponsored?: "supported" | "unsupported" | "unknown";
+};
+
 export function usePayOnce() {
   const { primaryWallet } = useDynamicContext();
 
@@ -31,9 +36,45 @@ export function usePayOnce() {
       throw new Error("Connect an EVM wallet first");
     }
 
-    // Returns a Viem Wallet Client.
+    // returns a Viem Wallet Client
     const walletClient = await primaryWallet.getWalletClient();
+
+    // nudge to Base Sepolia so users don’t have to switch manually
+    try {
+      await walletClient.switchChain({ id: baseSepolia.id });
+    } catch {
+      // incase the wallet rejects, we’ll still try to send — the chain pin on sendCalls will error clearly
+    }
+
     return walletClient; //need this client to send transactions and to use EIP-5792 batch calls
+  }
+
+  // read EIP-5792 capabilities for this account & chain
+  async function getCapabilities(): Promise<WalletCapabilities> {
+    const walletClient = await getWalletClient();
+    const [account] = await walletClient.getAddresses();
+
+    try {
+      // some wallets expose capabilities per chain id
+      const caps = await walletClient.getCapabilities({ account });
+      const chainCaps =
+        (caps as Record<string, any>)?.[baseSepolia.id as unknown as Hex] ??
+        (caps as Record<string, any>)?.[baseSepolia.id];
+      // makinng it better for UI
+      const atomic =
+        chainCaps?.atomic?.status ?? chainCaps?.batching?.status ?? "unknown";
+      const sponsored =
+        chainCaps?.paymasterService?.status ??
+        chainCaps?.sponsorship?.status ??
+        "unknown";
+
+      return {
+        atomic: (atomic as WalletCapabilities["atomic"]) ?? "unknown",
+        sponsored: (sponsored as WalletCapabilities["sponsored"]) ?? "unknown",
+      };
+    } catch {
+      return { atomic: "unknown", sponsored: "unknown" };
+    }
   }
 
   // ETH split: bundle native transfers
@@ -46,20 +87,18 @@ export function usePayOnce() {
       value: parseEther(amountEth),
     }));
 
-    // One-line batch with automatic fallback:
+    // one-line batch with automatic fallback if 5792 not supported
     // sendCalls - EIP-5792 way to send multiple calls at once
     // experimental_fallback - if the smart wallet does not support batch calls, it will send the transactions one by one
-    const res = await walletClient.sendCalls({
+    return walletClient.sendCalls({
       account,
       chain: baseSepolia,
       calls,
       experimental_fallback: true,
     });
-
-    return res; // { id, capabilities? }
   }
 
-  // USDC split: bundle ERC-20 transfers - builds contract calls to USDC contract
+  // USDC split: bundle ERC-20 transfers
   async function payOnceUSDC(
     recipients: { to: Address; amountUsdc: string }[]
   ) {
@@ -77,15 +116,13 @@ export function usePayOnce() {
       }),
     }));
 
-    const res = await walletClient.sendCalls({
-      account, // explicit sender
-      chain: baseSepolia, // pin testnet
+    return walletClient.sendCalls({
+      account,
+      chain: baseSepolia,
       calls,
       experimental_fallback: true,
     });
-
-    return res;
   }
 
-  return { payOnceETH, payOnceUSDC };
+  return { payOnceETH, payOnceUSDC, getCapabilities };
 }
