@@ -1,16 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import {
-  Plus,
-  X,
-  Wallet,
-  Users,
-  ArrowRight,
-  Check,
-  Loader2,
-  LogOut,
-} from "lucide-react";
+import { Plus, X, Users, ArrowRight, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,6 +15,9 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
+import { usePayOnce } from "@/hooks/usePayOnce";
+import type { Address } from "viem";
+
 import Header from "./header";
 
 interface Recipient {
@@ -88,21 +82,33 @@ export default function SplitBill() {
     );
   };
 
+  const { payOnceETH, payOnceUSDC } = usePayOnce();
+
   const handlePayOnce = async () => {
     if (!isFormValid()) return;
-
     setIsProcessing(true);
     setTransactionStatus("idle");
 
     try {
-      // Simulate batch transaction processing
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      // DO NEXT: implement the actual ERC-4337 batch transaction
+      if (selectedAsset === "ETH") {
+        await payOnceETH(
+          recipients.map((r) => ({
+            to: r.address as Address,
+            amountEth: r.amount,
+          }))
+        );
+      } else {
+        await payOnceUSDC(
+          recipients.map((r) => ({
+            to: r.address as Address,
+            amountUsdc: r.amount,
+          }))
+        );
+      }
 
       setTransactionStatus("success");
-    } catch (error) {
-      console.error("Transaction failed:", error);
+    } catch (err) {
+      console.error(err);
       setTransactionStatus("error");
     } finally {
       setIsProcessing(false);
