@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# The Split — Batch payouts with Dynamic + EIP-5792
 
-## Getting Started
+> One-click batch transfers of ETH or USDC to multiple recipients using **Dynamic** for auth/wallet UX and **EIP-5792** for batching (with graceful fallback). Runs on **Base Sepolia** (testnet) by default.
 
-First, run the development server:
+## ✨ Features
+
+- **Login with wallet** via Dynamic’s `DynamicWidget` and `useDynamicContext`
+- **Batch sends** with `walletClient.sendCalls` (EIP-5792) and `experimental_fallback` for wallets with no batching capabilities
+- **ETH or USDC** (Base Sepolia) in one flow
+- **Auto network switch** to Base Sepolia using `walletClient.switchChain`
+- **Capabilities detection** (shows if atomic batching or sponsored gas is supported)
+- **Safe inputs**: EVM address validation (`isAddress`) + precise decimals via `parseUnits`
+- **Clean, responsive UI** (Next.js + Tailwind + shadcn/ui + lucide)
+
+## 🧱 Tech Stack
+
+- **Next.js / React**, **TypeScript**, **Tailwind**, **shadcn/ui**
+- **Dynamic** (`@dynamic-labs/sdk-react-core`, `@dynamic-labs/ethereum`)
+- **Viem** for wallet RPCs / batching (`sendCalls`, `switchChain`, `getCapabilities`)
+- **Base Sepolia** testnet (USDC: `0x036CbD53842c5426634e7929541eC2318f3dCF7e`)
+
+## 🚀 Quickstart
+
+### Prereqs
+
+- Node 18+
+- A Dynamic project (free): get your **Environment ID** from the dashboard
+
+### Clone & install
+
+```bash
+git clone https://github.com/<you>/the-split
+cd the-split
+npm i
+```
+
+### Create a .env file in root dirrectory
+
+```bash
+NEXT_PUBLIC_DYNAMIC_ENV_ID=your_env_id_here
+```
+
+### Run the server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Testing
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Open the app at: http://localhost:3000
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Switch your wallet to Base Sepolia Testnet (the app also nudges automatically).
+- Get Base Sepolia ETH + USDC (testnet) from a faucet.
+- Add 2–3 recipients, enter small amounts (e.g., 0.00003 ETH or 0.25 USDC), and click Pay Once.
 
-## Learn More
+✅ Future Iterations / Roadmap
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Show per-call receipts
+- Split between more recipients
+- Allow users to create groups and connect each group member's wallets, creating group expenses to split between the members

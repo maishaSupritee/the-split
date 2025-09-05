@@ -145,15 +145,15 @@ export default function SplitBill() {
   const capBadge = (label: string, status?: string) => {
     const s = (status ?? "unknown").toLowerCase();
     const tone =
-      s === "supported"
+      s === "ready"
         ? "bg-emerald-100 text-emerald-700 border-emerald-300"
-        : s === "unsupported"
+        : s === "unknown"
         ? "bg-amber-100 text-amber-700 border-amber-300"
         : "bg-slate-100 text-slate-700 border-slate-300";
     const dot =
-      s === "supported"
+      s === "ready"
         ? "bg-emerald-500"
-        : s === "unsupported"
+        : s === "unknown"
         ? "bg-amber-500"
         : "bg-slate-400";
     return (
