@@ -29,7 +29,7 @@
 ### Clone & install
 
 ```bash
-git clone https://github.com/<you>/the-split
+git clone git@github.com:maishaSupritee/the-split.git
 cd the-split
 npm i
 ```
