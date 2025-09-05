@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Plus, X, Users, ArrowRight, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,10 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
-import { usePayOnce } from "@/hooks/usePayOnce";
+import { usePayOnce, type WalletCapabilities } from "@/hooks/usePayOnce";
+import { isAddress } from "viem";
 import type { Address } from "viem";
-
 import Header from "./header";
 
 interface Recipient {
@@ -27,7 +26,6 @@ interface Recipient {
 }
 
 export default function SplitBill() {
-  const { setShowAuthFlow, handleLogOut } = useDynamicContext(); // Show auth flow if not connected
   const [selectedAsset, setSelectedAsset] = useState<"ETH" | "USDC">("ETH");
   const [recipients, setRecipients] = useState<Recipient[]>([
     { id: "1", address: "", amount: "" },
@@ -38,20 +36,60 @@ export default function SplitBill() {
     "idle" | "success" | "error"
   >("idle");
   const [totalAmount, setTotalAmount] = useState("0");
+  const [caps, setCaps] = useState<WalletCapabilities>({
+    atomic: "unknown",
+    sponsored: "unknown",
+  });
 
-  // total amount calculation
+  const { payOnceETH, payOnceUSDC, getCapabilities } = usePayOnce();
+
+  // fetch capabilities once the component mounts (after wallet connect)
   useEffect(() => {
-    const total = recipients.reduce((sum, r) => {
-      const amount = parseFloat(r.amount) || 0;
-      return sum + amount;
-    }, 0);
+    getCapabilities()
+      .then(setCaps)
+      .catch(() => {});
+  }, [getCapabilities]);
+
+  //  total amount calculation
+  useEffect(() => {
+    const total = recipients.reduce(
+      (sum, r) => sum + (parseFloat(r.amount) || 0),
+      0
+    );
     setTotalAmount(total.toFixed(6));
   }, [recipients]);
 
+  // check validation errors per row
+  // if address is non-empty but invalid, or amount is non-empty but invalid
+  // useMemo to avoid re-calculating on every render
+  const rowErrors = useMemo(() => {
+    return recipients.map((r) => ({
+      invalidAddress: r.address.trim().length > 0 && !isAddress(r.address),
+      invalidAmount:
+        r.amount.trim().length > 0 &&
+        (isNaN(Number(r.amount)) || Number(r.amount) <= 0),
+    }));
+  }, [recipients]);
+
+  const canSubmit = useMemo(() => {
+    const allOk =
+      recipients.length >= 2 &&
+      recipients.every(
+        (r, i) =>
+          isAddress(r.address) &&
+          r.amount.trim().length > 0 &&
+          Number(r.amount) > 0 &&
+          !rowErrors[i].invalidAddress &&
+          !rowErrors[i].invalidAmount
+      ) &&
+      parseFloat(totalAmount) > 0;
+    return allOk && !isProcessing;
+  }, [recipients, rowErrors, totalAmount, isProcessing]);
+
   const addRecipient = () => {
     if (recipients.length < 3) {
-      setRecipients([
-        ...recipients,
+      setRecipients((prev) => [
+        ...prev,
         { id: Date.now().toString(), address: "", amount: "" },
       ]);
     }
@@ -59,7 +97,7 @@ export default function SplitBill() {
 
   const removeRecipient = (id: string) => {
     if (recipients.length > 2) {
-      setRecipients(recipients.filter((r) => r.id !== id)); // if id matches recipient id, remove that recipient
+      setRecipients((prev) => prev.filter((r) => r.id !== id));
     }
   };
 
@@ -68,24 +106,13 @@ export default function SplitBill() {
     field: "address" | "amount",
     value: string
   ) => {
-    setRecipients(
-      recipients.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    setRecipients((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
     );
   };
-
-  const isFormValid = () => {
-    // only valid if all recipients have an address and a positive amount
-    return (
-      recipients.every(
-        (r) => r.address && r.amount && parseFloat(r.amount) > 0
-      ) && parseFloat(totalAmount) > 0
-    );
-  };
-
-  const { payOnceETH, payOnceUSDC } = usePayOnce();
 
   const handlePayOnce = async () => {
-    if (!isFormValid()) return;
+    if (!canSubmit) return;
     setIsProcessing(true);
     setTransactionStatus("idle");
 
@@ -105,7 +132,6 @@ export default function SplitBill() {
           }))
         );
       }
-
       setTransactionStatus("success");
     } catch (err) {
       console.error(err);
@@ -115,11 +141,50 @@ export default function SplitBill() {
     }
   };
 
+  // capability badge component
+  const capBadge = (label: string, status?: string) => {
+    const s = (status ?? "unknown").toLowerCase();
+    const tone =
+      s === "supported"
+        ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+        : s === "unsupported"
+        ? "bg-amber-100 text-amber-700 border-amber-300"
+        : "bg-slate-100 text-slate-700 border-slate-300";
+    const dot =
+      s === "supported"
+        ? "bg-emerald-500"
+        : s === "unsupported"
+        ? "bg-amber-500"
+        : "bg-slate-400";
+    return (
+      <span
+        className={`inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full border ${tone}`}
+      >
+        <span className={`w-2 h-2 rounded-full ${dot}`} />
+        {label}: {s}
+      </span>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="max-w-2xl mx-auto space-y-6">
+          {/* Capabilities */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Wallet Capabilities</CardTitle>
+              <CardDescription>
+                Your connected wallet’s support on Base Sepolia (testnet)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              {capBadge("Atomic batch", caps.atomic)}
+              {capBadge("Sponsored gas", caps.sponsored)}
+            </CardContent>
+          </Card>
+
           {/* Asset Selection */}
           <Card>
             <CardHeader>
@@ -160,7 +225,7 @@ export default function SplitBill() {
                 <div>
                   <CardTitle>Recipients</CardTitle>
                   <CardDescription>
-                    Add 2-3 recipients for the split payment
+                    Add 2–3 recipients for the split payment
                   </CardDescription>
                 </div>
                 <div className="flex flex-col sm:flex-row items-center text-sm text-muted-foreground">
@@ -184,6 +249,7 @@ export default function SplitBill() {
                           size="sm"
                           onClick={() => removeRecipient(recipient.id)}
                           className="text-muted-foreground hover:text-destructive"
+                          aria-label={`Remove recipient ${index + 1}`}
                         >
                           <X className="w-4 h-4" />
                         </Button>
@@ -210,8 +276,17 @@ export default function SplitBill() {
                               e.target.value
                             )
                           }
-                          className="font-mono text-sm "
+                          className={`font-mono text-sm ${
+                            rowErrors[index].invalidAddress
+                              ? "border-red-500"
+                              : ""
+                          }`}
                         />
+                        {rowErrors[index].invalidAddress && (
+                          <p className="mt-1 text-xs text-red-600">
+                            Enter a valid EVM address (0x…)
+                          </p>
+                        )}
                       </div>
 
                       <div>
@@ -225,6 +300,7 @@ export default function SplitBill() {
                           id={`amount-${recipient.id}`}
                           type="number"
                           step="0.000001"
+                          min="0"
                           placeholder="0.0"
                           value={recipient.amount}
                           onChange={(e) =>
@@ -234,7 +310,17 @@ export default function SplitBill() {
                               e.target.value
                             )
                           }
+                          className={`${
+                            rowErrors[index].invalidAmount
+                              ? "border-red-500"
+                              : ""
+                          }`}
                         />
+                        {rowErrors[index].invalidAmount && (
+                          <p className="mt-1 text-xs text-red-600">
+                            Enter a positive number
+                          </p>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -294,14 +380,14 @@ export default function SplitBill() {
 
               <Button
                 onClick={handlePayOnce}
-                disabled={!isFormValid() || isProcessing}
+                disabled={!canSubmit}
                 className="w-full"
                 size="lg"
               >
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing Batch Transaction...
+                    Processing Batch Transaction…
                   </>
                 ) : (
                   <>
@@ -313,7 +399,8 @@ export default function SplitBill() {
 
               <p className="text-xs text-muted-foreground text-center">
                 This creates a single batch transaction to all recipients using
-                ERC-4337 smart wallet technology
+                ERC-4337 / EIP-5792. Your wallet may send atomically (if
+                supported) or sequentially via fallback.
               </p>
             </CardContent>
           </Card>
