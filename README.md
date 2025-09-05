@@ -24,7 +24,7 @@
 ### Prereqs
 
 - Node 18+
-- A Dynamic project (free): get your **Environment ID** from the dashboard
+- A [Dynamic project](https://www.dynamic.xyz) : get your **Environment ID** from the dashboard
 
 ### Clone & install
 
@@ -34,7 +34,7 @@ cd the-split
 npm i
 ```
 
-### Create a .env file in root dirrectory
+### Create a .env file in root directory
 
 ```bash
 NEXT_PUBLIC_DYNAMIC_ENV_ID=your_env_id_here
@@ -54,7 +54,7 @@ npm run dev
 - Get Base Sepolia ETH + USDC (testnet) from a faucet.
 - Add 2–3 recipients, enter small amounts (e.g., 0.00003 ETH or 0.25 USDC), and click Pay Once.
 
-✅ Future Iterations / Roadmap
+### ✅ Future Iterations / Roadmap
 
 - Show per-call receipts
 - Split between more recipients
